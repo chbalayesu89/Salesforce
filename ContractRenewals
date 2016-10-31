@@ -1,0 +1,604 @@
+global with sharing class ContractRenewals {
+
+    WebService static Opportunity Renew(Opportunity inOppId){
+    
+        Map<Id, Opportunity> insOppsMap = new Map<Id, Opportunity>{};
+        Map<Id, Opportunity> updOpps = new Map<Id, Opportunity>{};
+        List<OpportunityContactRole> insOcr = new List<OpportunityContactRole>{};
+        List<OpportunityLineItem> insOli = new List<OpportunityLineItem>{};
+        List<Filing_Cabinet__c> insFilCab = new List <Filing_Cabinet__c>{};
+        List<Task> oppTasksList = new List<Task>();
+        List<Task> oliTasksList = new List<Task>();
+        String oppName = null; 
+        Map<Id, Opportunity> oppMap = new Map<Id, Opportunity>();
+        Map<Id, List<OpportunityLineItem>> oliMap = new Map<Id, List<OpportunityLineItem>>();
+        Map<Id, List<OpportunityContactRole>> ocrMap = new Map<Id, List<OpportunityContactRole>>();
+        Map<Id, List<Attachments__c>> atchMap = new Map<Id, List<Attachments__c>>();
+        Map<Id, List<Filing_Cabinet__c>> fcMap = new Map<Id, List<Filing_Cabinet__c>>();
+        Map<Id, Opportunity> amdOppMap = new Map<Id, Opportunity>();
+        Map<Id, Opportunity> amdOrigOppMap = new Map<Id, Opportunity>();
+        Map<Id, List<OpportunityLineItem>> amdOliMap = new Map<Id, List<OpportunityLineItem>>();
+        Map<Id, List<OpportunityContactRole>> amdOcrMap = new Map<Id, List<OpportunityContactRole>>();
+        Map<Id, List<Attachments__c>> amdAtchMap = new Map<Id, List<Attachments__c>>();
+        Map<Id, List<Filing_Cabinet__c>> amdFcMap = new Map<Id, List<Filing_Cabinet__c>>();
+        String allErrMsg = null;
+        Opportunity newOpp = null;
+        Opportunity rtnOpp = null;
+        String errMsg = null;
+        String taskOppSubject = '**Auto Renew Error: Inactive Renewal Contact**';
+        String taskOppDesc1 = 'The Renewal Opportunity: ';
+        String taskOppDesc2 = ' has an inactive renewal contact.  Please contact support with updated contact information in order for this Opportunity to be renewed.';
+        String taskOliSubject = 'Auto Renew Warning: Inactive Contact on ';
+                  
+        System.debug('inOppId == null: '+ (inOppId == null ? 'TRUE' : 'FALSE') + ' '+ inOppId);
+        if(inOppId == null){
+            for(Opportunity o : [Select o.Id, o.Amended_Opportunity__c, o.Type, o.StageName, o.Salesperson__c, o.Pricebook2Id, 
+                                         o.Name, o.Expiration_Date__c,  o.Current_Effective_Date__c, o.Contract_Effective_Date__c, 
+                                         o.Contact__c, o.AccountId, o.RecordTypeId, o.Renewal_Type__c, o.Executed_Contract_Attached__c,
+                                         o.Contract_Attach_Date__c, o.Renewal_Contact__c, o.Renewal_Contact__r.Inactive_Contact__c, 
+                                         o.Account.Name, o.Account.OwnerId,o.Account.Renewal_Manager__c, o.Auto_Renew_Clause__c, o.Level_of_Effort__c,
+                                         o.Dental_Covered_Lives__c, o.Medical_Covered_Lives__c, o.Other_Value__c, 
+                                         o.Pricing_Matrix__c, o.Allowed_Increase__c,
+                                         o.Custom_Procedure_Code_Information__c, o.Custom_Percentile_Info__c, 
+                                         o.Custom_Coverage_Information__c, o.Custom_Additional__c,
+                                         o.WISAFI__Transaction_Type__c, o.WISAFI__Terms__c, o.WISAFI__Shipping_Method__c,
+                                         o.WISAFI__Sales_Rep__c, o.WISAFI__PO_Number__c, o.WISAFI__Class__c, o.hasSingleReleaseOLI__c, o.Select_level_of_effort__c
+                                From Opportunity o
+                                where o.Auto_Renew_Eligible__c = 'TRUE'
+                                and o.Auto_Renewal_Date__c = null
+                                and o.Type != 'Amendment'
+                                and o.RecordType.Name in ('Standard Product Opportunity', 'Custom Product Opportunity', 'Research Product Opportunity','ASP Vendor')
+                                and o.StageName = 'Closed Won'
+                                and o.Renewal_Type__c like 'Auto-Renew%' limit 25]){
+    
+                oppMap.put(o.Id, o);
+            }
+        } else {
+            for(Opportunity o : [Select o.Id, o.Amended_Opportunity__c, o.Type, o.StageName, o.Salesperson__c, o.Pricebook2Id, 
+                                         o.Name, o.Expiration_Date__c,  o.Current_Effective_Date__c, o.Contract_Effective_Date__c, 
+                                         o.Contact__c, o.AccountId, o.RecordTypeId, o.Renewal_Type__c, o.Executed_Contract_Attached__c,
+                                         o.Contract_Attach_Date__c, o.Renewal_Contact__c, o.Renewal_Contact__r.Inactive_Contact__c, 
+                                         o.Account.Name, o.Account.OwnerId,o.Account.Renewal_Manager__c, o.Auto_Renew_Clause__c, o.Level_of_Effort__c,
+                                         o.Dental_Covered_Lives__c, o.Medical_Covered_Lives__c, o.Other_Value__c, 
+                                         o.Pricing_Matrix__c, o.Allowed_Increase__c,
+                                         o.Custom_Procedure_Code_Information__c, o.Custom_Percentile_Info__c, 
+                                         o.Custom_Coverage_Information__c, o.Custom_Additional__c,
+                                         o.WISAFI__Transaction_Type__c, o.WISAFI__Terms__c, o.WISAFI__Shipping_Method__c,
+                                         o.WISAFI__Sales_Rep__c, o.WISAFI__PO_Number__c, o.WISAFI__Class__c,o.hasSingleReleaseOLI__c, o.Select_level_of_effort__c
+                                From Opportunity o
+                                where o.Id = :inOppId.Id]){
+            oppMap.put(o.Id, o);
+            }
+        }
+
+        //Pramit: added more details to oli query
+        for(OpportunityLineItem oli : [Select PricebookEntryId, Quantity, TotalPrice, UnitPrice, 
+                                                Coverage__c, Data_Format__c, Media_Type__c, Media_Format__c, 
+                                                Release_Schedule__c, Data_Format_Detail__c, Product_Line__c, 
+                                                Calculated_Unit_Price__c, Contact__c, Contact__r.Inactive_Contact__c,
+                                                Fulfillment_Group__c, 
+                                                Product_Family__c, Vendor__c, OpportunityId,
+                                                custom_procedure_code_information__c,custom_additional__c,
+                                                Custom_format__c, Custom_Data_Format_Detail__c,
+                                                custom_media_format__c, custom_percentile_info__c,
+                                                custom_coverage_information__c,
+                                                single_release_lookup__c,dates_of_service__c, custom_opportunity__c
+                                        From OpportunityLineItem 
+                                        where OpportunityId in :oppMap.keySet()]){
+                                            
+            if(!oliMap.containskey(oli.OpportunityId)){
+                oliMap.put(oli.OpportunityId, new List<OpportunityLineItem>());
+                System.debug('adding opp id list: '+ oli.OpportunityId);
+            }
+            System.debug('adding OLI to list: '+ oli.Id);
+            oliMap.get(oli.OpportunityId).add(oli);
+        }
+        
+        for(OpportunityContactRole ocr : [Select OpportunityId, ContactId, Role, IsPrimary 
+                                            From OpportunityContactRole
+                                            where OpportunityId in :oppMap.keySet()]){
+            if(!ocrMap.containskey(ocr.OpportunityId)){
+                ocrMap.put(ocr.OpportunityId, new List<OpportunityContactRole>());
+                System.debug('adding opp (OCR) id list: '+ ocr.OpportunityId);
+            }
+            System.debug('adding OCR to list: '+ ocr.Id);
+            ocrMap.get(ocr.OpportunityId).add(ocr);
+        }
+        
+        for(Attachments__c atch : [Select Id, Opportunity__c 
+                                    from Attachments__c
+                                    where Opportunity__c in :oppMap.keySet()]){
+            if(!atchMap.containskey(atch.Opportunity__c)){
+                atchMap.put(atch.Opportunity__c, new List<Attachments__c>());
+                System.debug('adding opp (ATCH) id list: '+ atch.Opportunity__c);
+            }
+            System.debug('adding ATCH to list: '+ atch.Id);
+            atchMap.get(atch.Opportunity__c).add(atch);
+       } 
+        
+        for(Filing_Cabinet__c fc : [Select Id, Opportunity__c, Opportunity__r.Amended_Opportunity__c, Attachment__c
+                                    from Filing_Cabinet__c
+                                    where Opportunity__c in :oppMap.keySet()]){
+            if(!fcMap.containskey(fc.Opportunity__c)){
+                fcMap.put(fc.Opportunity__c, new List<Filing_Cabinet__c>());
+                System.debug('adding opp (FC) id list: '+ fc.Opportunity__c);
+            }
+            System.debug('adding FC to list: '+ fc.Id);
+            fcMap.get(fc.Opportunity__c).add(fc);
+       }
+       
+        //////////////////////////////
+        // AMENDMENT QUERIES
+        //////////////////////////////
+
+        for(Opportunity o : [Select o.Id, o.Amended_Opportunity__c, o.Type, o.StageName, o.Salesperson__c, o.Pricebook2Id, 
+                                     o.Name, o.Expiration_Date__c,  o.Current_Effective_Date__c, o.Contract_Effective_Date__c, 
+                                     o.Contact__c, o.AccountId, o.RecordTypeId, o.Renewal_Type__c, o.Executed_Contract_Attached__c,
+                                     o.Contract_Attach_Date__c, o.Renewal_Contact__c, o.Renewal_Contact__r.Inactive_Contact__c, 
+                                     o.Account.Name, o.Account.OwnerId,o.Account.Renewal_Manager__c, o.Auto_Renew_Clause__c, o.Level_of_Effort__c,
+                                     o.Dental_Covered_Lives__c, o.Medical_Covered_Lives__c, o.Other_Value__c, 
+                                     o.Pricing_Matrix__c, o.Allowed_Increase__c,
+                                     o.Custom_Procedure_Code_Information__c, o.Custom_Percentile_Info__c, 
+                                     o.Custom_Coverage_Information__c, o.Custom_Additional__c,
+                                     o.WISAFI__Transaction_Type__c, o.WISAFI__Terms__c, o.WISAFI__Shipping_Method__c,
+                                     o.WISAFI__Sales_Rep__c, o.WISAFI__PO_Number__c, o.WISAFI__Class__c,o.hasSingleReleaseOLI__c, o.Select_level_of_effort__c
+                            From Opportunity o
+                            where o.StageName = 'Closed Won'
+                            and o.Amended_Opportunity__c in :oppMap.keySet()]){
+            amdOppMap.put(o.Id, o);
+            amdOrigOppMap.put(o.Amended_Opportunity__c, o);
+        }
+        
+        //Pramit: added more field for custom OLI
+        for(OpportunityLineItem oli : [Select PricebookEntryId, Quantity, TotalPrice, UnitPrice, 
+                                                Coverage__c, Data_Format__c, Media_Type__c, Media_Format__c, 
+                                                Release_Schedule__c, Data_Format_Detail__c, Product_Line__c, 
+                                                Calculated_Unit_Price__c, Contact__c, Contact__r.Inactive_Contact__c, 
+                                                Fulfillment_Group__c, 
+                                                Product_Family__c, Vendor__c, OpportunityId, Opportunity.Amended_Opportunity__c,
+                                                custom_procedure_code_information__c,custom_additional__c,
+                                                Custom_format__c, Custom_Data_Format_Detail__c,
+                                                custom_media_format__c, custom_percentile_info__c,
+                                                custom_coverage_information__c,
+                                                single_release_lookup__c,dates_of_service__c, custom_opportunity__c                                                
+                                        From OpportunityLineItem 
+                                        where OpportunityId in :amdOppMap.keySet()]){
+                                            
+            if(!amdOliMap.containskey(oli.OpportunityId)){
+                amdOliMap.put(oli.OpportunityId, new List<OpportunityLineItem>());
+                System.debug('adding amdOpp id list: '+ oli.OpportunityId);
+            }
+            System.debug('adding amdOLI to list: '+ oli.Id);
+            amdOliMap.get(oli.OpportunityId).add(oli);
+        }
+        
+        for(OpportunityContactRole ocr : [Select OpportunityId, ContactId, Role, IsPrimary, 
+                                                Opportunity.Amended_Opportunity__c 
+                                            From OpportunityContactRole
+                                            where OpportunityId in :amdOppMap.keySet()]){
+            if(!amdOcrMap.containskey(ocr.OpportunityId)){
+                amdOcrMap.put(ocr.OpportunityId, new List<OpportunityContactRole>());
+                System.debug('adding opp (amdOCR) id list: '+ ocr.OpportunityId);
+            }
+            System.debug('adding amdOCR to list: '+ ocr.Id);
+            amdOcrMap.get(ocr.OpportunityId).add(ocr);
+        }
+        
+        for(Attachments__c atch : [Select Id, Opportunity__c, Opportunity__r.Amended_Opportunity__c
+                                    from Attachments__c
+                                    where Opportunity__c in :amdOppMap.keySet()]){
+            if(!amdAtchMap.containskey(atch.Opportunity__c)){
+                amdAtchMap.put(atch.Opportunity__c, new List<Attachments__c>());
+                System.debug('adding opp (amdATCH) id list: '+ atch.Opportunity__c);
+            }
+            System.debug('adding amdATCH to list: '+ atch.Id);
+            amdAtchMap.get(atch.Opportunity__c).add(atch);
+       }
+       
+        for(Filing_Cabinet__c fc : [Select Id, Opportunity__c, Opportunity__r.Amended_Opportunity__c, Attachment__c
+                                    from Filing_Cabinet__c
+                                    where Opportunity__c in :amdOppMap.keySet()]){
+            if(!amdFcMap.containskey(fc.Opportunity__c)){
+                amdFcMap.put(fc.Opportunity__c, new List<Filing_Cabinet__c>());
+                System.debug('adding opp (amdFC) id list: '+ fc.Opportunity__c);
+            }
+            System.debug('adding amdFC to list: '+ fc.Id);
+            amdFcMap.get(fc.Opportunity__c).add(fc);
+       }
+       
+       ////////////////////////////////////////////////
+       // BEGIN CREATING OPPORTUNITIES
+       ///////////////////////////////////////////////
+
+        System.debug('oppMap size: '+ oppMap.size());
+        for(Opportunity o : oppMap.values()){
+            System.debug('here are the opps: '+ o);
+        }
+        for(Opportunity o : oppMap.values()){
+            Opportunity amdOpp = null;
+            if(amdOrigOppMap.containsKey(o.Id)){
+                amdOpp = amdOrigOppMap.get(o.Id);
+            }
+            if(o.Renewal_Contact__r.Inactive_Contact__c == true){
+                oppMap.remove(o.Id);
+                Task t = new Task(WhatId = o.Id,
+                                WhoId = o.Renewal_Contact__r.Id,
+                                OwnerId = o.Account.Renewal_Manager__c,
+                                Priority = 'High',
+                                ActivityDate = System.today(),
+                                Subject = taskOppSubject,
+                                Description = taskOppDesc1 + o.Name + taskOppDesc2
+                                );
+                oppTasksList.add(t);
+                system.debug('Adding Task for New Contract Renewal: '+ t);
+        
+            } 
+            if(amdOpp != null && amdOpp.Renewal_Contact__r.Inactive_Contact__c == true){
+                amdOppMap.remove(amdOpp.Id);
+                oppMap.remove(o.Id);
+                Task t = new Task(WhatId = amdOpp.Id,
+                                WhoId = o.Renewal_Contact__r.Id,
+                                OwnerId = amdOpp.Account.Renewal_Manager__c,
+                                Priority = 'High',
+                                ActivityDate = System.today(),
+                                Subject = taskOppSubject,
+                                Description = taskOppDesc1 + amdOpp.Name + taskOppDesc2
+                                );
+                oppTasksList.add(t);
+                system.debug('Adding Task for Amendment Renewal: '+ t);
+                
+            } 
+            if(oppMap.containsKey(o.Id)){
+                o.Auto_Renewal_Date__c = System.Now();
+                updOpps.put(o.Id, o);
+                //System.debug('Adding to updOpps 1: '+ o);
+                            
+                newOpp = new Opportunity(); 
+                newOpp.AccountId = o.AccountId;
+                newOpp.Contact__c = o.Contact__c;
+                newOpp.Contract_Effective_Date__c = o.Expiration_Date__c + 1;
+                //30 days prior to new eff date
+                if(inOppId == null){
+                    newOpp.CloseDate = System.today() + 30;
+                    newOpp.StageName = '90-day Notice';
+                }else{
+                    newOpp.CloseDate = newOpp.Contract_Effective_Date__c - 30;
+                    newOpp.StageName = 'Closed - Locked In';
+                }
+                newOpp.Expiration_Date__c = newOpp.Contract_Effective_Date__c.addYears(1) - 1;
+                newOpp.Contract_Terms_in_Months__c = String.valueOf(newOpp.Contract_Effective_Date__c.monthsBetween(newOpp.Expiration_Date__c + 1));
+                newOpp.Contract_Attach_Date__c = o.Contract_Attach_Date__c;
+                newOpp.Executed_Contract_Attached__c = o.Executed_Contract_Attached__c;
+                oppName = o.Account.Name + ' - Effective Date: ' + newOpp.Contract_Effective_Date__c.format();
+                if(oppName.length() > 120){
+                    newOpp.Name = o.Account.Name.substring(0,90) + ' - Effective Date: ' + newOpp.Contract_Effective_Date__c.format();
+                }
+                else{
+                    newOpp.Name = o.Account.Name + ' - Effective Date: ' + newOpp.Contract_Effective_Date__c.format();
+                }
+                newOpp.System_Generated_Renewal__c = true;
+                newOpp.OLI_Insert__c = true;
+                newOpp.Renewal_Contact__c = o.Renewal_Contact__c;
+                newOpp.Parent_Opportunity__c = o.Id;
+                newOpp.Pricebook2Id = o.Pricebook2Id;
+                newOpp.RecordTypeId = o.RecordTypeId;
+                newOpp.Allowed_Increase__c = o.Allowed_Increase__c;
+                newOpp.Renewal_Type__c = o.Renewal_Type__c;
+                newOpp.Auto_Renew_Clause__c = o.Auto_Renew_Clause__c;
+                newOpp.Type = o.Renewal_Type__c;
+                newOpp.Level_of_Effort__c = o.Level_of_Effort__c;
+                newOpp.Contact__c = o.Contact__c;
+                newOpp.Renewal_Amendment_Attached__c = false;
+                newOpp.Salesperson__c = o.Account.Renewal_Manager__c;
+                newOpp.OwnerId = o.Account.Renewal_Manager__c;
+                newOpp.Custom_Procedure_Code_Information__c = o.Custom_Procedure_Code_Information__c;
+                newOpp.Custom_Percentile_Info__c = o.Custom_Percentile_Info__c;
+                newOpp.Custom_Coverage_Information__c = o.Custom_Coverage_Information__c;
+                newOpp.Custom_Additional__c = o.Custom_Additional__c;
+                newOpp.Dental_Covered_Lives__c = o.Dental_Covered_Lives__c;
+                newOpp.Medical_Covered_Lives__c = o.Medical_Covered_Lives__c;
+                newOpp.Other_Value__c = o.Other_Value__c;
+                newOpp.Pricing_Matrix__c = o.Pricing_Matrix__c;
+                if(o.WISAFI__Transaction_Type__c == null){
+                    newOpp.WISAFI__Transaction_Type__c = 'Invoice';
+                }else{
+                    newOpp.WISAFI__Transaction_Type__c = o.WISAFI__Transaction_Type__c;
+                }
+                if(o.WISAFI__Terms__c == null){
+                    newOpp.WISAFI__Terms__c = 'Net 30';
+                }else{
+                    newOpp.WISAFI__Terms__c = o.WISAFI__Terms__c;
+                }
+                newOpp.WISAFI__Shipping_Method__c = o.WISAFI__Shipping_Method__c;
+                newOpp.WISAFI__Sales_Rep__c = o.WISAFI__Sales_Rep__c;
+                newOpp.WISAFI__PO_Number__c = o.WISAFI__PO_Number__c;
+                newOpp.WISAFI__Class__c = o.WISAFI__Class__c;
+                newOpp.hasSingleReleaseOLI__c = o.hasSingleReleaseOLI__c;
+                newOpp.Select_level_of_effort__c = o.Select_level_of_effort__c;
+     
+                System.debug('newOpp:'+ newOpp);
+                insOppsMap.put(newOpp.Parent_Opportunity__c, newOpp);
+            }
+        }
+        
+        if(!insOppsMap.isEmpty()){
+            try{
+                insert insOppsMap.values();
+            }
+            catch (System.Dmlexception e){for(Opportunity opp : insOppsMap.values()){for (Integer i = 0; i < e.getNumDml(); i++) {
+                        errMsg = ' Record #: '+(e.getDmlIndex(i)+1)+'<br>'+ e.getDmlMessage(i)+'<br>';
+                        System.debug(Logginglevel.ERROR, 'Error Inserting Opportunity records in Contract Renewals class: '+ errMsg);
+                    }
+                    //opp.addError(errMsg);
+                }
+                allErrMsg = errMsg;
+            }
+        }
+
+        //////////////////////////////////////////////////
+        // ADD CHILD RECORDS TO NEWLY CREATED OPPS
+        //////////////////////////////////////////////////
+        //pramit:added custom information to new OLI
+        if(!insOppsMap.isEmpty()){
+            for(Opportunity o : oppMap.values()) {
+                List<OpportunityLineItem> oliList = oliMap.get(o.id); 
+                if(oliList != null){
+                    for(OpportunityLineItem oli : oliList) {
+                        OpportunityLineItem newOli = new OpportunityLineItem();
+                        newOli.OpportunityId = insOppsMap.get(o.id).Id; 
+                        newOli.PricebookEntryId = oli.PricebookEntryId;
+                        newOli.Quantity = oli.Quantity;
+                        newOli.TotalPrice = oli.TotalPrice;
+                        newOli.Calculated_Unit_Price__c = oli.Calculated_Unit_Price__c;
+                        newOli.Product_Line__c = oli.Product_Line__c;
+                        newOli.Product_Family__c = oli.Product_Family__c;
+                        newOli.Coverage__c = oli.Coverage__c;
+                        newOli.Data_Format__c = oli.Data_Format__c;
+                        newOli.Data_Format_Detail__c = oli.Data_Format_Detail__c;
+                        newOli.Media_Type__c = oli.Media_Type__c;
+                        newOli.Media_Format__c = oli.Media_Format__c;
+                        newOli.Release_Schedule__c = oli.Release_Schedule__c;
+                        newOli.Contact__c = oli.Contact__c;
+                        newOli.Fulfillment_Group__c = oli.Fulfillment_Group__c;
+                        newOli.Vendor__c = oli.Vendor__c;
+                        newOLI.custom_coverage_information__c = oli.custom_coverage_information__c;
+                        newOLI.custom_procedure_code_information__c = oli.custom_procedure_code_information__c;
+                        newOLI.custom_additional__c = oli.custom_additional__c;
+                        newOLI.Custom_format__c = oli.Custom_format__c;
+                        newOLI.Custom_Data_Format_Detail__c = oli.Custom_Data_Format_Detail__c;
+                        newOLI.custom_media_format__c = oli.custom_media_format__c;
+                        newOLI.custom_percentile_info__c = oli.custom_percentile_info__c;
+                        newOLI.single_release_lookup__c = oli.Single_Release_Lookup__c;
+                        newOLI.dates_of_service__c = oli.dates_of_service__c;
+                        newOLI.custom_opportunity__c = oli.custom_opportunity__c;                   
+                        insOli.add(newOli);
+                        System.debug('Adding new OLI: '+ newOli);
+                        
+                        if(oli.Contact__r.Inactive_Contact__c == true){
+                            System.debug('insOppsMap.get(o.id).Id: '+ insOppsMap.get(o.id).Id);
+                            System.debug('o.Account.OwnerId: '+ o.Account.OwnerId);
+                            Task t = new Task(WhatId = insOppsMap.get(o.id).Id,
+                                            OwnerId = o.Account.Renewal_Manager__c,
+                                            Priority = 'Normal',
+                                            ActivityDate = System.today() + 25,
+                                            Subject = taskOliSubject + oli.Product_Family__c,
+                                            Description = 'The Renewal Opportunity: ' + o.Name + ' has an inactive contact on product ' + oli.Product_Family__c + '.  Please update contact information before closing this Opportunity.'
+                                     );
+                            oliTasksList.add(t);
+                        }
+                    }
+                }
+                
+                List<OpportunityContactRole> ocrList = ocrMap.get(o.id); 
+                if(ocrList != null){
+                    for(OpportunityContactRole ocr : ocrList){
+                        OpportunityContactRole newOcr = new OpportunityContactRole();
+                        newOcr.OpportunityId = insOppsMap.get(o.id).Id;
+                        newOcr.ContactId = ocr.ContactId;
+                        newOcr.Role = ocr.Role;
+                        newOcr.IsPrimary = ocr.IsPrimary;
+                        System.debug('Adding new OCR: '+ newOcr);
+                        insOcr.add(newOcr);
+                    }
+                }
+    
+                List<Attachments__c> atchList = atchMap.get(o.id);
+                if(atchList != null){
+                    for(Attachments__c att : atchList) {
+                        Filing_Cabinet__c newFc = new Filing_Cabinet__c();
+                        newFc.Attachment__c = att.Id;
+                        newFc.Opportunity__c = insOppsMap.get(o.id).Id;
+                        System.debug('Adding new FC: '+ newFc);
+                        insFilCab.add(newFc);
+                    }
+                }
+
+                List<Filing_Cabinet__c> fcList = fcMap.get(o.id);
+                if(fcList != null){
+                    for(Filing_Cabinet__c fc : fcList) {
+                        Filing_Cabinet__c newFc = new Filing_Cabinet__c();
+                        newFc.Attachment__c = fc.Attachment__c;
+                        newFc.Opportunity__c = insOppsMap.get(o.id).Id;
+                        System.debug('Adding new FC: '+ newFc);
+                        insFilCab.add(newFc);
+                    }
+                }
+            }
+    
+            /////////////////////////////////////////////
+            //  ADD CHILD RECORDS FROM AMENDMENT
+            /////////////////////////////////////////////
+            
+            for(Opportunity o : amdOppMap.values()) {
+                List<OpportunityLineItem> amdOliList = amdOliMap.get(o.id); 
+                if(amdOliList != null){
+                    for(OpportunityLineItem oli : amdOliList){
+                        if(insOppsMap.containsKey(oli.Opportunity.Amended_Opportunity__c)){
+                            o.Auto_Renewal_Date__c = System.Now();
+                            updOpps.put(o.Id, o);
+                            
+                            OpportunityLineItem newOli = new OpportunityLineItem();
+                            newOli.OpportunityId = insOppsMap.get(oli.Opportunity.Amended_Opportunity__c).Id;
+                            newOli.PricebookEntryId = oli.PricebookEntryId;
+                            newOli.Quantity = oli.Quantity;
+                            newOli.TotalPrice = oli.TotalPrice;
+                            newOli.Calculated_Unit_Price__c = oli.Calculated_Unit_Price__c;
+                            newOli.Product_Line__c = oli.Product_Line__c;
+                            newOli.Product_Family__c = oli.Product_Family__c;
+                            newOli.Coverage__c = oli.Coverage__c;
+                            newOli.Data_Format__c = oli.Data_Format__c;
+                            newOli.Data_Format_Detail__c = oli.Data_Format_Detail__c;
+                            newOli.Media_Type__c = oli.Media_Type__c;
+                            newOli.Media_Format__c = oli.Media_Format__c;
+                            newOli.Release_Schedule__c = oli.Release_Schedule__c;
+                            newOli.Contact__c = oli.Contact__c;
+                            newOli.Fulfillment_Group__c = oli.Fulfillment_Group__c;
+                            newOli.Vendor__c = oli.Vendor__c;
+                            newOLI.custom_coverage_information__c = oli.custom_coverage_information__c;
+                            newOLI.custom_procedure_code_information__c = oli.custom_procedure_code_information__c;
+                            newOLI.custom_additional__c = oli.custom_additional__c;
+                            newOLI.Custom_format__c = oli.Custom_format__c;
+                            newOLI.Custom_Data_Format_Detail__c = oli.Custom_Data_Format_Detail__c;
+                            newOLI.custom_media_format__c = oli.custom_media_format__c;
+                            newOLI.custom_percentile_info__c = oli.custom_percentile_info__c;
+                            newOLI.single_release_lookup__c = oli.Single_Release_Lookup__c;
+                            newOLI.dates_of_service__c = oli.dates_of_service__c;
+                            newOLI.custom_opportunity__c = oli.custom_opportunity__c;                               
+                            insOli.add(newOli);
+                            System.debug('Adding new Amend OLI: '+ newOli);
+                            
+                            if(oli.Contact__r.Inactive_Contact__c == true){
+                                System.debug('o.Id: '+ o.Id);
+                                System.debug('insOppsMap.get(oli.Opportunity.Amended_Opportunity__c).Id: '+ insOppsMap.get(oli.Opportunity.Amended_Opportunity__c).Id);
+                                System.debug('o.Account.OwnerId: '+ o.Account.OwnerId);
+                                Task t = new Task(WhatId = insOppsMap.get(oli.Opportunity.Amended_Opportunity__c).Id,
+                                                OwnerId = o.Account.Renewal_Manager__c,
+                                                Priority = 'Normal',
+                                                ActivityDate = System.today() + 25,
+                                                Subject = taskOliSubject + oli.Product_Family__c,
+                                                Description = 'The Renewal Opportunity: ' + o.Name + ' has an inactive contact on product ' + oli.Product_Family__c + '.  Please update contact information before closing this Opportunity.'
+                                         );
+                                oliTasksList.add(t);
+                            }
+                        }
+                    }
+                }
+    
+                List<OpportunityContactRole> amdOcrList = amdOcrMap.get(o.id); 
+                if(amdOcrList != null){
+                    for(OpportunityContactRole ocr : amdOcrList){
+                        if(insOppsMap.containsKey(ocr.Opportunity.Amended_Opportunity__c)){
+                            OpportunityContactRole newOcr = new OpportunityContactRole();
+                            newOcr.OpportunityId = insOppsMap.get(ocr.Opportunity.Amended_Opportunity__c).Id;
+                            newOcr.ContactId = ocr.ContactId;
+                            newOcr.Role = ocr.Role;
+                            newOcr.IsPrimary = ocr.IsPrimary;
+                            System.debug('Adding new Amend OCR: '+ newOcr);
+            
+                            insOcr.add(newOcr);
+                        }
+                    }
+                }
+    
+                List<Attachments__c> amdAtchList = amdAtchMap.get(o.id); 
+                if(amdAtchList != null){
+                    for(Attachments__c att : amdAtchList) {
+                        if(insOppsMap.containsKey(att.Opportunity__r.Amended_Opportunity__c)){
+                            Filing_Cabinet__c newFc = new Filing_Cabinet__c();
+                            newFc.Attachment__c = att.Id;
+                            newFc.Opportunity__c = insOppsMap.get(att.Opportunity__r.Amended_Opportunity__c).Id;
+                            System.debug('Adding new Amend FC: '+ newFc);
+            
+                            insFilCab.add(newFc);
+                        }
+                    }
+                }
+                
+                List<Filing_Cabinet__c> fcList = amdFcMap.get(o.id);
+                if(fcList != null){
+                    for(Filing_Cabinet__c fc : fcList) {
+                        Filing_Cabinet__c newFc = new Filing_Cabinet__c();
+                        newFc.Attachment__c = fc.Attachment__c;
+                        newFc.Opportunity__c = insOppsMap.get(fc.Opportunity__r.Amended_Opportunity__c).Id;
+                        System.debug('Adding new Amend FC: '+ newFc);
+                        insFilCab.add(newFc);
+                    }
+                }
+            }
+        }
+        
+        if(!oppTasksList.isEmpty()){
+            System.debug('Userinfo.getUserName(): ' + Userinfo.getUserName());
+            Database.DMLOptions dmlo = new Database.DMLOptions();
+            dmlo.EmailHeader.triggerUserEmail = true;
+            database.insert(oppTasksList, dmlo);
+        }
+        
+        if(!oliTasksList.isEmpty()){
+            insert oliTasksList;
+        }
+        
+        if(!updOpps.isEmpty()) {
+            try{
+                update updOpps.values();
+            }
+            catch (System.Dmlexception e){for(Opportunity opp : updOpps.values()){for (Integer i = 0; i < e.getNumDml(); i++) {
+                        errMsg = ' Record #: '+(e.getDmlIndex(i)+1)+'<br>'+ e.getDmlMessage(i)+'<br>';
+                        System.debug(Logginglevel.ERROR, 'Error Updating Opportunity records in Contract Renewals class: '+ errMsg);
+	                }
+	                    //opp.addError(errMsg);
+                }
+                allErrMsg = errMsg;
+            }
+        }
+ 
+        if(!insOli.isEmpty()){
+            System.debug('insOli: '+insOli);
+            try{
+                insert insOli;
+            }
+            catch (System.Dmlexception e){for(OpportunityLineItem oli : insOli){for (Integer i = 0; i < e.getNumDml(); i++) {
+                        errMsg = ' Record #: '+(e.getDmlIndex(i)+1)+'<br>'+ e.getDmlMessage(i)+'<br>';
+                        System.debug(Logginglevel.ERROR, 'Error Inserting OpportunityLineItem records in Contract Renewals class: '+ errMsg);
+                    }
+                    //oli.addError(errMsg);
+                }
+                allErrMsg = errMsg;
+            }
+         }
+
+        if(!insOcr.isEmpty()){
+            System.debug('insOcr: '+insOcr);
+            try{
+                insert insOcr;
+            }
+            catch (System.Dmlexception e){for(OpportunityContactRole ocr : insOcr){for (Integer i = 0; i < e.getNumDml(); i++) {
+                        errMsg = ' Record #: '+(e.getDmlIndex(i)+1)+'<br>'+ e.getDmlMessage(i)+'<br>';
+                        System.debug(Logginglevel.ERROR, 'Error Inserting OpportunityContactRole records in Contract Renewals class: '+ errMsg);
+                    }
+                    //ocr.addError(errMsg);
+                }
+                allErrMsg = errMsg;
+            }
+        }
+  
+        if(!insFilCab.isEmpty()){
+            System.debug('insFilCab: '+insFilCab);
+            try{
+                insert insFilCab;
+            }
+            catch (System.Dmlexception e){for(Filing_Cabinet__c fil : insFilCab){for (Integer i = 0; i < e.getNumDml(); i++) {
+                        errMsg = ' Record #: '+(e.getDmlIndex(i)+1)+'<br>'+ e.getDmlMessage(i)+'<br>';
+                        System.debug(Logginglevel.ERROR, 'Error Inserting Filing_Cabinet__c records in Contract Renewals class: '+ errMsg);
+                    }
+                  //fil.addError(errMsg);
+                }
+                allErrMsg = errMsg;
+            }
+        }
+        if(newOpp != null){
+            rtnOpp = insOppsMap.get(newOpp.Parent_Opportunity__c);
+        }
+        return rtnOpp;
+    }
+}
