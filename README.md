@@ -6,3 +6,6 @@ It is used for extracting Recordtype, Picklist values, available Recordtypes fro
 
 # ContractRenewals.apxc
 It is used for renewing the contracts of existing opportunities
+
+# SYF_Utility
+It is used for retrieving the data from the excel file available as a static resource from the method readZipCodeTimeZoneFromStaticResources()
