@@ -1,0 +1,53 @@
+
+public class SYF_Utility {
+
+	public static Map<String,String> zipcodeTimezoneMap {get;set;}
+	public static Boolean brun = false;
+	
+	public static void setTimeZone(List<sObject> sobjectList, String sourceZipCodeFieldName, String targetZipCodeFieldName) {
+		
+		if(sobjectList!=null && sobjectList.size() > 0
+		&& !String.isEmpty(sourceZipCodeFieldName) 
+		&& !String.isEmpty(targetZipCodeFieldName)) {
+			for(sObject so:sobjectList) {
+				String szipCode = (String) so.get(sourceZipCodeFieldName);
+				String stimezone = retrieveTimezoneByZipcode(szipCode);
+				if(!String.isEmpty(stimezone)) {
+					so.put(targetZipCodeFieldName,stimezone);
+				}
+			}
+		}
+		
+	}
+	
+	public static String retrieveTimezoneByZipcode(String zipCode) {
+		String result = null;
+		if(!String.isEmpty(zipCode) && zipCode.length() > 4) {
+			if(zipcodeTimezoneMap == null) {
+				readZipCodeTimeZoneFromStaticResources();
+			}
+			String searchZipCode = zipCode.substring(0,5);
+			if(!brun && !zipcodeTimezoneMap.containsKey(searchZipCode)) {
+				readZipCodeTimeZoneFromStaticResources();
+				brun=true;
+			}
+			result = zipcodeTimezoneMap.get(searchZipCode);
+		}		
+		return result;
+	}
+	
+	private static void readZipCodeTimeZoneFromStaticResources() {
+		if(zipcodeTimezoneMap == null) {
+			zipcodeTimezoneMap = new Map<String,String>();
+		}
+		List<StaticResource> srList = [Select Body From StaticResource where Name = 'ZipCodeTimeZone' limit 1];		
+		for(StaticResource sr:srList) {
+			String zctz = sr.Body.toString();
+			String[] srowAr = zctz.split(',');
+			for(Integer i=0;i<srowAr.size();i++) {
+				zipcodeTimezoneMap.put(srowAr[i].trim(),srowAr[i+1].trim());
+				i++;
+			}
+		} 
+	}
+}
