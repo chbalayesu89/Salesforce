@@ -1,0 +1,181 @@
+public class ContactUs2Controller {
+    
+    public CustomLead obj {get;set;}
+    public String message {get;set;}
+    @Testvisible
+    private List<SelectOption> organizationTypeItem;
+    public List<SelectOption> marketSectorItems;
+    @Testvisible
+    private List<SelectOption> categoryItems;
+    
+    public List<SelectOption> getOrganizationTypeItem()
+    {
+        return organizationTypeItem;
+    }
+    private void setOrganizationTypeItem(List<SelectOption> items)
+    {
+        organizationTypeItem=items;
+    }
+    public List<SelectOption> getCategoryItems()
+    {
+        Schema.DescribeFieldResult categroyItems = Lead.Category__c.getDescribe();
+        List<Schema.PicklistEntry> categroyValues = categroyItems.getPicklistValues();
+        List<SelectOption> items=new    List<SelectOption> ();
+        items.add(new SelectOption('','Please Select'));
+        for(Schema.PicklistEntry p:categroyValues)
+        {
+            items.add(new SelectOption(p.getValue(),p.getLabel()));
+        }
+        return items;
+    }
+    @Testvisible
+    private void setCategoryItems(List<SelectOption> items)
+    {
+        categoryItems=items;
+    }
+    public List<SelectOption> getMarketSectorItems()
+    {
+        Schema.DescribeFieldResult marketItems = Lead.Market_Sector__c.getDescribe();
+        List<Schema.PicklistEntry> marketValues = marketItems.getPicklistValues();
+        List<SelectOption> items=new    List<SelectOption> ();
+        items.add(new SelectOption('','Please Select'));
+        for(Schema.PicklistEntry p:marketValues)
+        {
+            items.add(new SelectOption(p.getValue(),p.getLabel()));
+        }
+        return items;
+    }
+    @Testvisible
+    private void setMarketSectorItems(List<SelectOption> items)
+    {
+        marketSectorItems=items;
+    }
+    public ContactUs2Controller()
+    {
+        obj = new CustomLead();
+        
+        Schema.DescribeFieldResult organizationType = Lead.Organization_Type__c.getDescribe();
+        List<Schema.PicklistEntry> organizationTypeValues = organizationType.getPicklistValues();
+        List<SelectOption> items=new    List<SelectOption> ();
+        items.add(new SelectOption('','Please Select'));
+        for(Schema.PicklistEntry p:organizationTypeValues)
+        {
+            items.add(new SelectOption(p.getValue(),p.getLabel()));
+        }
+        setOrganizationTypeItem(items);
+        message=ApexPages.currentPage().getParameters().get('message');
+    }
+    public Pagereference generateLead()
+    {
+        PageReference pf=Page.Contact_Us;
+        pf.getParameters().put('message','Thank you for contacting us.  A FAIR Health team member will get back to you shortly.   ');
+        pf.setRedirect(true);
+        try
+        {
+            Lead lObj= convertToStandardLead(obj);
+            String recordTypeName=getConcernedRecordType(obj.organizationType);
+            lObj.RecordTypeId=getRecordTypeId(recordTypeName);
+            insert lObj;
+            
+        }
+        catch(Exception ex)
+        {
+            System.debug('###############'+ex);
+            message='Oops !! Some thing going wrong. Error is : '+ex.getMessage();
+            pf.getParameters().put('message',message);
+            
+        }
+        return pf;
+    }
+    
+    private String getRecordTypeId(String option)
+    {
+        if(option!=null && option.length()>0)
+        {
+            List<RecordType> listOfRecordType=[Select r.SobjectType, r.Name, r.IsActive, r.Id, r.DeveloperName, r.BusinessProcessId From RecordType r where r.SobjectType='Lead' and r.isActive=true and r.Name=:option];
+            if(listOfRecordType.size()>0)
+            {
+                RecordType s=listOfRecordType[0];
+                return ''+s.Id;
+            }
+        }
+        return '';  
+    }
+    @Testvisible
+    private String getConcernedRecordType(String organizationType)
+    {
+        if(organizationType!=null && organizationType.length()>0)
+        {
+            if(organizationType.equalsIgnoreCase('Healthcare Industry')||organizationType.equalsIgnoreCase('Government/Exchanges')||organizationType.equalsIgnoreCase('Academic/Researchers')||organizationType.equalsIgnoreCase('Union/Employer Groups')||organizationType.equalsIgnoreCase('Consultants'))
+            {
+                return 'Commercial Leads';
+            }
+            else if(organizationType.equalsIgnoreCase('Health Care Provider'))
+            {
+                return 'Provider Portal Leads';
+            }
+            else
+            {
+                return 'Consumer Inquiries';
+            }
+        }
+        return '';      
+    }
+    
+    private Lead convertToStandardLead(CustomLead l)
+    {
+        Lead lObj=new Lead();
+        lObj.Organization_Type__c=l.organizationType;
+        lObj.Category__c=l.categoryField;
+        lObj.FirstName=l.firstName;
+        lObj.lastName=l.lastName;
+        lObj.title=l.title;
+        lObj.Email=l.Email;
+        lObj.Company=l.Company;
+        lObj.Phone=l.Phone;
+        lObj.City=l.City;
+        lObj.state=l.state;
+        lObj.PostalCode=l.zip;
+        lObj.country=l.country;
+        lObj.description=l.description;
+        
+        return lObj;
+    }
+    
+    public class CustomLead
+    {
+        public String organizationType{get;set;}
+        public String categoryField{get;set;}
+        public String firstName{get;set;}
+        public String lastName{get;set;}
+        public String title{get;set;}
+        public String Email{get;set;}
+        public String Company{get;set;}
+        public String Phone{get;set;}
+        public String City{get;set;}
+        public String state{get;set;}
+        public String zip{get;set;}
+        public String country{get;set;}
+        public String description{get;set;}
+        public String extraColumn{get;set;}
+        
+        public CustomLead(){}
+        public CustomLead(String fname,String lname,String pTitle,String pEmail,String pCompany,String pPhone,String pCity,String pState,String pZip,String pCountry,String pComments)
+        {
+            firstName=fname;
+            lastName=lname;
+            title=pTitle;
+            Email=pEmail;
+            Company=pCompany;
+            Phone=pPhone;
+            City=pCity;
+            state=pState;
+            zip=pZip;
+            country=pCountry;
+            description=pComments;
+        }
+        
+        
+    }
+
+}
