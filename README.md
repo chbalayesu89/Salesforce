@@ -9,3 +9,7 @@ It is used for renewing the contracts of existing opportunities
 
 # SYF_Utility
 It is used for retrieving the data from the excel file available as a static resource from the method readZipCodeTimeZoneFromStaticResources()
+
+# GeorgiaWCOrderEmailService
+ Email services are automated processes that use Apex classes to process the contents, headers, and attachments of inbound email.
+ It is used to create Account, contact , Opportunity and OLI from email body.
