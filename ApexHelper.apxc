@@ -4,7 +4,7 @@ public with sharing class ApexHelper {
 	
 	 
    public static String getRecordTypeID(String obj_apiname, String recordtypeName) {
-       return Schema.getGlobalDescribe().get(objtype).getDescribe().getRecordTypeInfosByName().get(rtName).getRecordTypeId();
+       return Schema.SObjectType.obj_apiname.getRecordTypeInfosByName().get(recordtypeName).getRecordTypeId();
     }
     
     
