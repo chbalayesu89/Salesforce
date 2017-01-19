@@ -1,0 +1,496 @@
+/**
+ * Email services are automated processes that use Apex classes
+ * to process the contents, headers, and attachments of inbound
+ * email.
+ * 
+ * create Account, contact , Opportunity and OLI from email body.
+ */
+ 
+global class GeorgiaWCOrderEmailService implements Messaging.InboundEmailHandler {
+
+    global Messaging.InboundEmailResult handleInboundEmail(Messaging.InboundEmail email, Messaging.InboundEnvelope envelope) {
+        Messaging.InboundEmailResult result = new Messaging.InboundEmailresult();
+        
+        Map<String, String> metaDataMap = new Map<String, String>();
+        Map<String, OpportunityLineItem> productQuantityMapReaL = new Map<String, OpportunityLineItem>(); 
+        // Pattern p = Pattern.compile('^.*(;)');
+        //Matcher pm = p.matcher( email.plainTextBody.stripHtmlTags() );
+        
+        String input = email.plainTextBody.stripHtmlTags();
+        String resultString = input.removeStart(input.substring(0,input.indexOf('First Name')));//Removing everything until first name for cleaning email body
+        
+        metaDataMap = parseEmailBody(resultString);
+      
+        /* filter */
+       for(String key: metaDataMap.keyset()){
+            System.debug(LoggingLevel.INFO,key+' => '+metaDataMap.get(key));
+            if( key.contains('Organization') ){
+                metaDataMap.put('Organization',metaDataMap.get(key).replace('\'',''));
+            }
+            else if( key.contains('Shipping City') ){
+                metaDataMap.put('Shipping City',metaDataMap.get(key).replace('\'',''));
+            }
+            else if( key.contains('Shipping State') ){
+                metaDataMap.put('Shipping State',metaDataMap.get(key).replace('\'',''));
+            }
+            else if( key.contains('Shipping Zip') ){
+                metaDataMap.put('Shipping Zip',metaDataMap.get(key).replace('\'',''));
+            }
+            else if( key.contains('City') ){
+                metaDataMap.put('City',metaDataMap.get(key).replace('\'',''));
+            }
+            else if( key.contains('State') ){
+                metaDataMap.put('State',metaDataMap.get(key).replace('\'',''));
+            }
+            else if( key.contains('Zip') ){
+                metaDataMap.put('Zip',metaDataMap.get(key).replace('\'',''));
+            }
+            else if( key.contains('First Name') && !key.contains('Shipping First Name')){
+                metaDataMap.put('First Name',metaDataMap.get(key).replace('\'',''));
+            }
+            else if( key.contains('Last Name') && !key.contains('Shipping Last Name')){
+                metaDataMap.put('Last Name',metaDataMap.get(key).replace('\'',''));
+            }
+            else if( key.contains('Email') ){
+                metaDataMap.put('Email',metaDataMap.get(key).replace('\'',''));
+            }
+            else if( key.contains('Phone') ){
+                metaDataMap.put('Phone',metaDataMap.get(key).replace('\'',''));
+            }
+            else if( key.contains('ups_tracking_id') ){
+                metaDataMap.put('ups_tracking_id',metaDataMap.get(key).replace('\'',''));
+            }
+            else if( key.contains('Transaction id') ){
+                metaDataMap.put('Transaction id',metaDataMap.get(key).replace('\'',''));
+            }
+            else if(key.contains('Address1')){
+                 metaDataMap.put('Address1',metaDataMap.get(key).replace('\'',''));
+            }
+            else if(key.contains('Address2')){
+                 metaDataMap.put('Address2',metaDataMap.get(key).replace('\'',''));
+            }
+            else if(key.contains('Shipping Address 1')){
+                 metaDataMap.put('Shipping Address 1',metaDataMap.get(key).replace('\'',''));
+            }
+            else if(key.contains('Shipping Address 2')){
+                 metaDataMap.put('Shipping Address 2',metaDataMap.get(key).replace('\'',''));
+            }
+        }
+        
+       for(String key: metaDataMap.keyset()){
+         System.debug(LoggingLevel.INFO,key+' => '+metaDataMap.get(key));
+      //     System.debug('---------------------------------->'+metaDataMap.get('First Name'));
+       }
+        
+         /*Call Helper for Record Creation*/  
+        // createData( metaDataMap );
+        
+           SavePoint sp = Database.setSavepoint();
+      try{    
+            //Account acc = getAccount( metaDataMap );
+            Account acc = new Account();
+            acc.Name = String.isBlank( metaDataMap.get('Organization') ) ?  (metaDataMap.get('First Name') + metaDataMap.get('Last Name')): metaDataMap.get('Organization');
+            //System.debug('#########'+acc.Name);
+            
+            acc.Market_Sector__c = 'Other';
+            acc.ShippingCity = metaDataMap.get('Shipping City');
+            //System.debug('#########'+acc.ShippingCity);
+            
+            acc.ShippingState = metaDataMap.get('Shipping State');
+            //System.debug('#########'+acc.ShippingState);
+            
+            acc.ShippingPostalCode = metaDataMap.get('Shipping Zip');
+            //System.debug('#########'+acc.ShippingPostalCode );
+            
+            acc.BillingCity = metaDataMap.get('City');
+            //System.debug('#########'+acc.BillingCity);
+            
+            acc.BillingState = metaDataMap.get('State');
+            //System.debug('#########'+acc.BillingState);
+            
+            
+            acc.BillingPostalCode =  metaDataMap.get('Zip');
+            //System.debug('#########'+acc.BillingPostalCode);
+            
+            acc.BillingStreet =  (metaDataMap.get('Address1') != null? metaDataMap.get('Address1') : '') +' '+(metaDataMap.get('Address2') != null? metaDataMap.get('Address2') : '');
+            //System.debug('#########'+acc.BillingStreet);
+            
+            acc.ShippingStreet=  (metaDataMap.get('Shipping Address 1') != null? metaDataMap.get('Shipping Address 1') : '') +' '+(metaDataMap.get('Shipping Address 2') != null? metaDataMap.get('Shipping Address 2') : '');
+            //System.debug('#########'+acc.ShippingStreet);
+            
+            acc.RecordTypeId = ApexHelper.getRecordTypeID('Account', 'Georgia Website Accounts');
+            insert acc;
+            
+            Contact cont = new Contact();
+            cont.FirstName = metaDataMap.get('First Name');
+            cont.LastName = metaDataMap.get('Last Name');
+            cont.AccountId = acc.id;
+            cont.Email = metaDataMap.get('Email').replace('\'','');
+            cont.Phone = metaDataMap.get('Phone');
+            cont.RecordTypeId = ApexHelper.getRecordTypeID('Contact', 'Georgia Website Contacts');
+            insert cont;
+            
+            Opportunity opp = new Opportunity();
+            opp.Name = metaDataMap.get('Transaction id');
+            opp.AccountId = acc.id;
+            opp.Contact__c = cont.id;
+            opp.StageName = 'Closed Won';
+            opp.Payment_Type__c = 'Card';
+            opp.CloseDate = System.today();
+            opp.RecordTypeId = ApexHelper.getRecordTypeID('Opportunity', 'Georgia Website Transactions');
+            opp.Tracking_Number__c = metaDataMap.get('ups_tracking_id');
+            insert opp;
+            
+            Map<String,String> productQuentityMap = new Map<String,String>();
+            List<OpportunityLineItem> oliList = new List<OpportunityLineItem>();
+    
+            for(String s : metaDataMap.keyset())
+            {
+            	//system.debug(s.containsOnly('Quantity of 2016 Georgia Workers\' Compensation Medical Fee Schedule - Hard Copy'));
+            	system.debug(s);
+            	//system.debug(s.equals('Quantity of 2016 Georgia Workers\' Compensation Medical Fee Schedule - Hard Copy'));
+            	
+                if(s.containsOnly('Quantity of PDF') 
+                    || s.containsOnly('Quantity of Book') 
+                    || s.contains('Quantity of 2015 Georgia Workers\' Compensation Medical Fee Schedule - Hard Copy')
+                    || s.contains('Quantity of 2016 Georgia Workers\' Compensation Medical Fee Schedule - Hard Copy')
+                    || s.containsOnly('Quantity of 2015 Georgia Workers\' Compensation Medical Fee Schedule - Electronic Package')
+                    || s.containsOnly('Quantity of 2016 Georgia Workers\' Compensation Medical Fee Schedule - Electronic Package') 
+                    || s.contains('Quantity of 2016 Georgia Workers\' Compensation Medical Fee Schedule - PDF')
+                    || s.contains('Quantity of 2015 Georgia Workers\' Compensation Medical Fee Schedule - PDF') 
+                    || s.containsOnly('Shipping and Handing Charge')
+                    || (s.contains('Tax') && !s.contains('Tax Exempt Status'))
+                    || s.contains('Quantity of 2016 Georgia Workers\' Compensation Medical Fee Schedule - Electronic Package - PDF and Excel Spreadsheet Package')
+                    || s.contains('Quantity of 2015 Georgia Workers\' Compensation Medical Fee Schedule - Electronic Package - PDF and Excel Spreadsheet Package')
+                    || s.contains('Quantity of 2015 Georgia Workers\' Compensation Medical Fee Schedule - Electronic Package - Additional Users')
+                    || s.contains('Quantity of 2016 Georgia Workers\' Compensation Medical Fee Schedule - Electronic Package - Additional Users')
+                    )
+                    {
+	                    system.debug('####Added'+s);
+	                    productQuentityMap.put(s, metaDataMap.get(s));
+                    }
+            }
+        
+            for(String key : productQuentityMap.keyset() )  {
+                  system.debug('####Key'+key); 
+                 // system.debug('####AND'+ productQuentityMap.get(key).replace('\'','').deleteWhitespace());
+                  	
+                  	/**
+                  	*@description new Product's Name are added
+                  	*/
+                  	/**New Line Date 18 Apr 2016*/
+                    if( key.contains('Quantity of 2016 Georgia Workers\' Compensation Medical Fee Schedule - Electronic Package - PDF and Excel Spreadsheet Package') 
+                    && Integer.valueOf( productQuentityMap.get(key).replace('\'','').deleteWhitespace()) != 0 )
+                    {
+                    	  String productName = '2016 Georgia Workers\' Compensation Medical Fee Schedule - Electronic Package';
+                          Product2 proPdf = [Select p.Id, p.Name From Product2 p Where p.Name =: productName limit 1];
+                          
+                          OpportunityLineItem oliPdf = new OpportunityLineItem();
+                          oliPdf.Quantity = Integer.valueOf( productQuentityMap.get(key).replace('\'','').deleteWhitespace() );
+                          oliPdf.UnitPrice = 0;
+                          oliPdf.OpportunityId = opp.ID;
+                          oliPdf.PricebookEntryId = [Select id from PricebookEntry where Product2Id =: proPdf.id limit 1].id;
+                          oliPdf.Product_Line__c = 'N/A';
+                          oliPdf.Product_Family__c = productName;
+                          oliList.add(oliPdf);
+                          
+                          productQuantityMapReal.put(key, oliPdf);
+                          
+                    }     
+                    if( key.contains('Quantity of 2015 Georgia Workers\' Compensation Medical Fee Schedule - Electronic Package - PDF and Excel Spreadsheet Package') 
+                    && Integer.valueOf( productQuentityMap.get(key).replace('\'','').deleteWhitespace()) != 0 )
+                    {
+                    	  String productName = '2015 Georgia Workers\' Compensation Medical Fee Schedule - Electronic Package';
+                          Product2 proPdf = [Select p.Id, p.Name From Product2 p Where p.Name =: productName limit 1];
+                          OpportunityLineItem oliPdf = new OpportunityLineItem();
+                          oliPdf.Quantity = Integer.valueOf( productQuentityMap.get(key).replace('\'','').deleteWhitespace() );
+                          oliPdf.UnitPrice = 0;
+                          oliPdf.OpportunityId = opp.ID;
+                          oliPdf.PricebookEntryId = [Select id from PricebookEntry where Product2Id =: proPdf.id limit 1].id;
+                          oliPdf.Product_Line__c = 'N/A';
+                          oliPdf.Product_Family__c = productName;
+                          oliList.add(oliPdf);
+                          
+                          productQuantityMapReal.put(key, oliPdf);
+                          
+                      }    
+                       
+                       
+                       if( key.contains('Quantity of 2015 Georgia Workers\' Compensation Medical Fee Schedule - Electronic Package - Additional Users') 
+                          ||  key.contains('Quantity of 2016 Georgia Workers\' Compensation Medical Fee Schedule - Electronic Package - Additional Users') )
+                        {
+                    	  
+                    	  String productName = 'Additional Online User';
+                          Product2 proPdf = [Select p.Id, p.Name From Product2 p Where p.Name =: productName limit 1];
+                          OpportunityLineItem oliPdf = new OpportunityLineItem();
+                         
+                         if( productQuantityMapReal.get('Additional Users') != null)
+                         {
+                          oliPdf.Quantity = productQuantityMapReal.get('Additional Users').Quantity + Integer.valueOf( productQuentityMap.get(key).replace('\'','').deleteWhitespace() );
+                        
+                         }else{
+                          oliPdf.Quantity = Integer.valueOf( productQuentityMap.get(key).replace('\'','').deleteWhitespace() );
+                         }
+                          oliPdf.UnitPrice = 0;
+                          oliPdf.OpportunityId = opp.ID;
+                          oliPdf.PricebookEntryId = [Select id from PricebookEntry where Product2Id =: proPdf.id limit 1].id;
+                          oliPdf.Product_Line__c = 'N/A';
+                          oliPdf.Product_Family__c = productName;
+                        
+                        
+                          oliList.add(oliPdf);
+                          productQuantityMapReal.put('Additional Users', oliPdf);
+                         
+                       }    
+                                         
+                    /**End*/            
+                
+                    if( key.contains('Quantity of 2016 Georgia Workers\' Compensation Medical Fee Schedule - PDF') 
+                    && Integer.valueOf( productQuentityMap.get(key).replace('\'','').deleteWhitespace()) != 0 ){
+                    	  String productName = '2016 Georgia Workers\' Compensation Medical Fee Schedule - PDF';
+                          Product2 proPdf = [Select p.Id, p.Name From Product2 p Where p.Name =: productName limit 1];
+                          OpportunityLineItem oliPdf = new OpportunityLineItem();
+                          oliPdf.Quantity = Integer.valueOf( productQuentityMap.get(key).replace('\'','').deleteWhitespace() );
+                          oliPdf.UnitPrice = 0;
+                          oliPdf.OpportunityId = opp.ID;
+                          oliPdf.PricebookEntryId = [Select id from PricebookEntry where Product2Id =: proPdf.id limit 1].id;
+                          oliPdf.Product_Line__c = 'N/A';
+                          oliPdf.Product_Family__c = productName;
+                          oliList.add(oliPdf);
+                          
+                          productQuantityMapReal.put(key, oliPdf);
+                          
+                      }
+                      // new code
+                if( key.contains('Quantity of 2015 Georgia Workers\' Compensation Medical Fee Schedule - PDF') 
+                    && Integer.valueOf( productQuentityMap.get(key).replace('\'','').deleteWhitespace()) != 0 ){
+                    	String productName = '2015 Georgia Workers\' Compensation Medical Fee Schedule - PDF';
+                         Product2 proPdf = [Select p.Id, p.Name From Product2 p Where p.Name =: productName limit 1];
+                         OpportunityLineItem oliPdf = new OpportunityLineItem();
+                          oliPdf.Quantity = Integer.valueOf( productQuentityMap.get(key).replace('\'','').deleteWhitespace() );
+                          oliPdf.UnitPrice = 0;
+                          oliPdf.OpportunityId = opp.ID;
+                          oliPdf.PricebookEntryId = [Select id from PricebookEntry where Product2Id =: proPdf.id limit 1].id;
+                          oliPdf.Product_Line__c = 'N/A';
+                          oliPdf.Product_Family__c = productName;
+                          oliList.add(oliPdf);
+                          
+                           productQuantityMapReal.put(key, oliPdf);
+                           
+                      }
+                  if( key == 'Quantity of 2015 Georgia Workers\' Compensation Medical Fee Schedule - Electronic Package' 
+                    && Integer.valueOf( productQuentityMap.get(key).replace('\'','').deleteWhitespace()) != 0 ){
+                    	 String productName = '2015 Georgia Workers\' Compensation Medical Fee Schedule - Electronic Package';
+                         Product2 proPdf = [Select p.Id, p.Name From Product2 p Where p.Name =: productName limit 1];
+                         OpportunityLineItem oliPdf = new OpportunityLineItem();
+                          oliPdf.Quantity = Integer.valueOf( productQuentityMap.get(key).replace('\'','').deleteWhitespace() );
+                          oliPdf.UnitPrice = 0;
+                          oliPdf.OpportunityId = opp.ID;
+                          oliPdf.PricebookEntryId = [Select id from PricebookEntry where Product2Id =: proPdf.id limit 1].id;
+                          oliPdf.Product_Line__c = 'N/A';
+                          oliPdf.Product_Family__c = productName;
+                          oliList.add(oliPdf);
+                          
+                           productQuantityMapReal.put(key, oliPdf);
+                           
+                      }
+                    if( key == 'Quantity of 2016 Georgia Workers\' Compensation Medical Fee Schedule - Electronic Package' 
+                    && Integer.valueOf( productQuentityMap.get(key).replace('\'','').deleteWhitespace()) != 0 ){
+                    	 String productName = '2016 Georgia Workers\' Compensation Medical Fee Schedule - Electronic Package';
+                         Product2 proPdf = [Select p.Id, p.Name From Product2 p Where p.Name =: productName limit 1];
+                         OpportunityLineItem oliPdf = new OpportunityLineItem();
+                          oliPdf.Quantity = Integer.valueOf( productQuentityMap.get(key).replace('\'','').deleteWhitespace() );
+                          oliPdf.UnitPrice = 0;
+                          oliPdf.OpportunityId = opp.ID;
+                          oliPdf.PricebookEntryId = [Select id from PricebookEntry where Product2Id =: proPdf.id limit 1].id;
+                          oliPdf.Product_Line__c = 'N/A';
+                          oliPdf.Product_Family__c = productName;
+                          oliList.add(oliPdf);
+                          
+                           productQuantityMapReal.put(key, oliPdf);
+                      }
+                   if( key.contains('Quantity of 2015 Georgia Workers\' Compensation Medical Fee Schedule - Hard Copy') 
+                    && Integer.valueOf( productQuentityMap.get(key).replace('\'','').deleteWhitespace()) != 0 ){
+                    	 String productName = '2015 Georgia Workers\' Compensation Medical Fee Schedule - Hard Copy';
+                         Product2 proPdf = [Select p.Id, p.Name From Product2 p Where p.Name =: productName limit 1];
+                         OpportunityLineItem oliPdf = new OpportunityLineItem();
+                          oliPdf.Quantity = Integer.valueOf( productQuentityMap.get(key).replace('\'','').deleteWhitespace() );
+                          oliPdf.UnitPrice = 0;
+                          oliPdf.OpportunityId = opp.ID;
+                          oliPdf.PricebookEntryId = [Select id from PricebookEntry where Product2Id =: proPdf.id limit 1].id;
+                          oliPdf.Product_Line__c = 'N/A';
+                          oliPdf.Product_Family__c = productName;
+                          oliList.add(oliPdf);
+                          
+                           productQuantityMapReal.put(key, oliPdf);
+                           
+                      }
+                     if( key.contains('Quantity of 2016 Georgia Workers\' Compensation Medical Fee Schedule - Hard Copy') 
+                    && Integer.valueOf( productQuentityMap.get(key).replace('\'','').deleteWhitespace()) != 0 ){
+                    	 String productName = '2016 Georgia Workers\' Compensation Medical Fee Schedule - Hard Copy';
+                         Product2 proPdf = [Select p.Id, p.Name From Product2 p Where p.Name =: productName limit 1];
+                         OpportunityLineItem oliPdf = new OpportunityLineItem();
+                          oliPdf.Quantity = Integer.valueOf( productQuentityMap.get(key).replace('\'','').deleteWhitespace() );
+                          oliPdf.UnitPrice = 0;
+                          oliPdf.OpportunityId = opp.ID;
+                          oliPdf.PricebookEntryId = [Select id from PricebookEntry where Product2Id =: proPdf.id limit 1].id;
+                          oliPdf.Product_Line__c = 'N/A';
+                          oliPdf.Product_Family__c = productName;
+                          oliList.add(oliPdf);
+                          
+                           productQuantityMapReal.put(key, oliPdf);
+                           
+                      }
+                      //end of new code
+                      if( key.contains('Quantity of Book') 
+                      && Integer.valueOf(productQuentityMap.get(key).replace('\'','').deleteWhitespace()) != 0){
+                         Product2 proBook = [Select p.Id, p.Name From Product2 p Where p.Name =: 'Georgia Book' limit 1];
+                         OpportunityLineItem oliBook = new OpportunityLineItem();
+                          oliBook.Quantity = Integer.valueOf(productQuentityMap.get(key).replace('\'','').deleteWhitespace());
+                          oliBook.UnitPrice = 0;
+                          oliBook.OpportunityId = opp.ID;
+                          oliBook.PricebookEntryId = [Select id from PricebookEntry where Product2Id =: proBook.id limit 1].id;
+                          oliBook.Product_Line__c = 'N/A';
+                          oliBook.Product_Family__c = 'Georgia Book';
+                          oliList.add(oliBook);
+                          
+                           productQuantityMapReal.put(key, oliBook);
+                      }
+                       if( key.contains('Quantity of Package')){
+                        Integer count = Integer.valueOf(productQuentityMap.get(key).replace('\'','').deleteWhitespace());
+                         if(count > 1){
+                             Product2 proPackage = [Select p.Id, p.Name From Product2 p Where p.Name =: 'Georgia Package' limit 1];
+                             OpportunityLineItem oliPackage = new OpportunityLineItem();
+                              oliPackage.Quantity = 1;
+                              oliPackage.UnitPrice = 0;
+                              oliPackage.OpportunityId = opp.ID;
+                              oliPackage.PricebookEntryId = [Select id from PricebookEntry where Product2Id =: proPackage.id limit 1].id;
+                              oliPackage.Product_Line__c = 'N/A';
+                              oliPackage.Product_Family__c = 'Georgia Package';
+                              oliList.add(oliPackage);
+                              //For rest of count
+                             productQuantityMapReal.put('Quantity of Package Georgia Package', oliPackage);
+                            
+                              Product2 adduser = [Select p.Id, p.Name From Product2 p Where p.Name =: 'Additional Online User' limit 1];
+                              OpportunityLineItem au = new OpportunityLineItem();
+                              au.Quantity = count - 1;
+                              au.UnitPrice = 0;
+                              au.OpportunityId = opp.ID;
+                              au.PricebookEntryId = [Select id from PricebookEntry where Product2Id =: adduser.id limit 1].id;
+                              au.Product_Line__c = 'N/A';
+                              au.Product_Family__c = 'Additional Online User';
+                              oliList.add(au);
+                              
+                               productQuantityMapReal.put('Quantity of Package Additional Online User', au);
+                             
+                         }
+                         
+                          else if(count == 1)
+                          {
+                          
+                          Product2 proPackage = [Select p.Id, p.Name From Product2 p Where p.Name =: 'Georgia Package' limit 1];
+                             OpportunityLineItem oliPackage = new OpportunityLineItem();
+                              oliPackage.Quantity = 1;
+                              oliPackage.UnitPrice = 0;
+                              oliPackage.OpportunityId = opp.ID;
+                              oliPackage.PricebookEntryId = [Select id from PricebookEntry where Product2Id =: proPackage.id limit 1].id;
+                              oliPackage.Product_Line__c = 'N/A';
+                              oliPackage.Product_Family__c = 'Georgia Package';
+                              oliList.add(oliPackage);
+                              
+                              productQuantityMapReal.put('Quantity of Package Georgia Package' , oliPackage);
+                              
+                            }
+                          
+                         else if(count == 0)
+                          {
+                            //skip
+                          }
+                      }
+                      if( key.contains('Shipping and Handing Charge') 
+                      && Decimal.valueOf(productQuentityMap.get(key).replace('\'','').deleteWhitespace()) != 0){
+                         Product2 shipAmt = [Select p.Id, p.Name From Product2 p Where p.Name =: 'Shipping Amount' limit 1];
+                         OpportunityLineItem ship = new OpportunityLineItem();
+                          ship.Quantity = 1;
+                          ship.UnitPrice = Decimal.valueOf(productQuentityMap.get(key).replace('\'','').deleteWhitespace());
+                          ship.OpportunityId = opp.ID;
+                          ship.PricebookEntryId = [Select id from PricebookEntry where Product2Id =: shipAmt.id limit 1].id;
+                          ship.Product_Line__c = 'N/A';
+                          ship.Product_Family__c = 'Shipping Amount';
+                          oliList.add(ship);
+                          
+                          productQuantityMapReal.put('Shipping Amount' , ship);
+                          
+                      }
+                        if( (key.contains('Tax') && !key.contains('Tax Exempt Status'))
+                       && Decimal.valueOf(productQuentityMap.get(key).replace('\'','').deleteWhitespace()) != 0){
+                         Product2 taxAmt = [Select p.Id, p.Name From Product2 p Where p.Name =: 'Tax Amount' limit 1];
+                         OpportunityLineItem tax = new OpportunityLineItem();
+                          tax.Quantity = 1;
+                          tax.UnitPrice = Decimal.valueOf(productQuentityMap.get(key).replace('\'','').deleteWhitespace());
+                          tax.OpportunityId = opp.ID;
+                          tax.PricebookEntryId = [Select id from PricebookEntry where Product2Id =: taxAmt.id limit 1].id;
+                          tax.Product_Line__c = 'N/A';
+                          tax.Product_Family__c = 'Tax Amount';
+                          oliList.add(tax);
+                          
+                          productQuantityMapReal.put('Tax Amount' , tax);
+                      }
+            }
+            //insert oliList;
+            
+             OpportunityLineItem temp =  productQuantityMapReal.get('Additional Users');
+            if(temp != null )
+            {
+	             if( temp.Quantity > 0 ){
+	           		  //skip
+	             }else{
+	             	productQuantityMapReal.remove('Additional Users');
+	             }
+            }  
+            
+            insert productQuantityMapReal.values();
+            System.debug(LoggingLevel.INFO, 'STATUS 200..:)');//Everything is allright
+        }catch(Exception ex)
+        {
+            System.debug(LoggingLevel.ERROR, ex.getMessage());
+            System.debug(LoggingLevel.ERROR, ex.getLineNumber());
+            Database.rollback(sp);    
+        } 
+        return result;
+    }
+    
+    /*Parse body*/
+    private Map<String, String> parseEmailBody(String emailBody){
+        Map<String, String> metaDataMapTemp = new Map<String, String>();
+        System.debug(LoggingLevel.INFO, emailBody);
+        if(!String.isEmpty(emailBody)){
+            //String stripedHtmlvalue = emailBody.stripHtmlTags();
+             List<String> splitValues = new List<String>();
+             splitValues = emailBody.split(';');
+             for(String val: splitValues){
+                if(String.isNotBlank(val)){
+                    System.debug(LoggingLevel.INFO, '-->'+val);
+                    if( val.contains(':')){
+                        List<String> finalValues = new List<String>();
+                        finalValues = val.split(':');
+                        if(!finalValues.isEmpty() && finalValues.size() == 2 ){
+                            if(finalValues.get(0) == 'Email'){
+                                /*Clean email value*/
+                                String s1 = finalValues.get(1).replace('"','\'');
+                                System.debug(LoggingLevel.INFO, '-------------->'+s1);
+                                String s2 = s1.substringBetween('<','>');
+                                s1 = String.isNotBlank(s2)? s1.remove( '<'+s2+'>' ):s1;
+                                System.debug(LoggingLevel.INFO, '-------------->'+s1);
+                                metaDataMapTemp.put(finalValues.get(0), s1 );
+                            }else{
+                                metaDataMapTemp.put(finalValues.get(0),finalValues.get(1).replace('"','\''));
+                            }
+                        }
+                    }
+                }
+             }
+        }
+        return metaDataMapTemp;
+    }
+}
